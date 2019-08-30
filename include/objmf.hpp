@@ -11,6 +11,26 @@
 namespace OBJMF {
 
 struct Model {
+
+    float *data = nullptr;
+    uint32_t *indices = nullptr;
+    size_t dataSize = 0;
+    size_t indexCount = 0;
+
+    Model(float *d, size_t ds, uint32_t *i, size_t ic)
+        : dataSize(ds), indexCount(ic)
+    {
+        
+        
+
+    ~Model() {
+        if (data != nullptr) {
+            delete[] data;
+        }
+        if (indices != nullptr) {
+            delete[] data;
+        }
+    }
 };
 
 void readObjFile(std::string path) {
@@ -73,13 +93,12 @@ void readObjFile(std::string path) {
             for (int i = 0; i < 3; i++) {
                 for (int j = 0; j < 3; j++) {
                     size_t offset;
-                    values[j] = std::stoi(&(str[last]), &offset);
+                    values[j] = std::stoi(&(str[last]), &offset) - 1;
                     last += offset + 1;
                 }
                 std::string identifier = std::to_string(values[0]) + '/' +
                                          std::to_string(values[1]) + '/' +
                                          std::to_string(values[2]);
-//                 std::cout << identifier << ' ';
                 auto search = vertexGroups.find(identifier);
                 if (search != vertexGroups.end()) {
                     indices.push_back(search->second);
@@ -98,7 +117,6 @@ void readObjFile(std::string path) {
                     vertexGroups[identifier] = nextIndex++;
                 }
             }
-//             std::cout << '\n';
         }
     }
 
@@ -110,17 +128,6 @@ void readObjFile(std::string path) {
         std::cout << data[i + 3] << ' ' << data[i + 4] << " ; ";
         std::cout << data[i + 5] << ' ' << data[i + 6] << ' ' << data[i + 7] << '\n';
     }
-
-//     std::cout << "---------------\n";
-//     for (eng::Vec3f v : vertices)
-//         std::cout << v[0] << ' ' << v[1] << ' ' << v[2] << '\n';
-//     std::cout << "---------------\n";
-//     for (eng::Vec2f v : texCoords)
-//         std::cout << v[0] << ' ' << v[1] << '\n';
-//     std::cout << "---------------\n";
-//     for (eng::Vec3f v : normals)
-//         std::cout << v[0] << ' ' << v[1] << ' ' << v[2] << '\n';
-//     std::cout << "---------------\n";
 
     file.close();
 }
