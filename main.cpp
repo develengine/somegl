@@ -11,143 +11,176 @@
 
 #include "math.hpp"
 #include "objmf.hpp"
+#include "shaders.hpp"
+#include "vaos.hpp"
+#include "textures.hpp"
 
-float vertices[] = {
-     1.0f, 1.0f, 0.0f,  1.0f, 0.0f,
-     1.0f,-1.0f, 0.0f,  1.0f, 1.0f,
-    -1.0f,-1.0f, 0.0f,  0.0f, 1.0f,
-    -1.0f, 1.0f, 0.0f,  0.0f, 0.0f
+enum KeySigns {
+    KEY_W,
+    KEY_A,
+    KEY_S,
+    KEY_D,
+    KEY_SPACE,
+    KEY_SHIFT,
+    KEY_COUNT
 };
 
-uint32_t indices[] = {
-    0, 1, 2,
-    2, 3, 0
-};
+bool keyStates[KEY_COUNT];
 
-std::string readFile(const std::string path) {
-    std::ifstream file(path);
-    std::string str;
-    
-    file.seekg(0, std::ios::end);   
-    str.reserve(file.tellg());
-    file.seekg(0, std::ios::beg);
-    
-    str.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-    return str;
+void keyCallback(SDL_Event &event, bool down) {
+    SDL_Scancode scancode = event.key.keysym.scancode;
+    switch (scancode) {
+        case SDL_SCANCODE_W:
+            keyStates[KEY_W] = down;
+            break;
+        case SDL_SCANCODE_A:
+            keyStates[KEY_A] = down;
+            break;
+        case SDL_SCANCODE_S:
+            keyStates[KEY_S] = down;
+            break;
+        case SDL_SCANCODE_D:
+            keyStates[KEY_D] = down;
+            break;
+        case SDL_SCANCODE_SPACE:
+            keyStates[KEY_SPACE] = down;
+            break;
+        case SDL_SCANCODE_LSHIFT:
+            keyStates[KEY_SHIFT] = down;
+            break;
+        default : return;
+    }
 }
 
 int main(int argc, char *argv[]) {
 
     Application::init();
+    Application::setKeyCallback(keyCallback);
 
-    OBJMF::readObjFile("res/copeblock.obj");
+    OBJMF::Model copeBlock = OBJMF::readObjFile("res/Dog.obj");
 
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
+    const int SIZE = 10;
+    const float DISTANCE = 3.0f;
+    eng::Mat4f instanceInfo[SIZE * SIZE * SIZE];
+    for (int x = 0; x < SIZE; x++) {
+        for (int y = 0; y < SIZE; y++) {
+            for (int z = 0; z < SIZE; z++) {
+                eng::Mat4f &mat = instanceInfo[z * SIZE * SIZE + y * SIZE + x];
+                mat = eng::Mat4f::translation((float)x * DISTANCE, (float)y * DISTANCE, (float)z * DISTANCE);
+            }
+        }
+    }
 
-    uint32_t vao;
-    glGenVertexArrays(1, &vao);
-    glBindVertexArray(vao);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+//     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 
-    uint32_t vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    VAO vao(true);
 
-    uint32_t ibo;
-    glGenBuffers(1, &ibo);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
+    vao.add(makeVTNBuffer(0, copeBlock.data, copeBlock.dataSize));
+    vao.add(makeMatrixBuffer(3, (float*)instanceInfo, SIZE * SIZE * SIZE, GL_STATIC_DRAW, 1));
+    vao.addIndexBuffer(makeIndexBuffer(copeBlock.indices, copeBlock.indexCount));
     
-    glBindVertexArray(0);
+    VAO::bindNone();
+
+    copeBlock.free();
 
     int width, height, channelCount;
-    uint8_t *data = stbi_load("res/kek.png", &width, &height, &channelCount, 0);
-
-    uint32_t texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_MIRRORED_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    stbi_set_flip_vertically_on_load(true);
+    uint8_t *data = stbi_load("res/Dog_diffuse.jpg", &width, &height, &channelCount, STBI_rgb_alpha);
 
     if (!data) {
         std::cerr << "Failed to load image\n";
         exit(-1);
     }
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
+    TexParameters parameters = {
+        data,
+        width, height,
+        GL_REPEAT, GL_REPEAT,
+        GL_NEAREST_MIPMAP_NEAREST, GL_NEAREST,
+        GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE
+    };
 
-    glBindTexture(GL_TEXTURE_2D, 0);
+    Texture texture(parameters);
 
-    int succes;
-    char infoLog[512];
+    GraphicShader shader(
+        GraphicShader::load("res/shaders/shader.vert"),
+        GraphicShader::load("res/shaders/shader.frag")
+    );
+    shader.use();
 
-    std::string vertexSourceString = readFile("res/shaders/shader.vert");
-    std::string fragmentSourceString = readFile("res/shaders/shader.frag");
-    const char *vertexSource = vertexSourceString.c_str();
-    const char *fragmentSource = fragmentSourceString.c_str();
+    int mvpMatrix = shader.getUniform("u_mvpMat");
 
-    uint32_t vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexSource, NULL);
-    glCompileShader(vertexShader);
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &succes);
-    if (!succes) {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cerr << "Failed to compile vertex shader! Error:\n" << infoLog << '\n';
-    }
-    
-    uint32_t fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentSource, NULL);
-    glCompileShader(fragmentShader);
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &succes);
-    if (!succes) {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cerr << "Failed to compile vertex shader! Error:\n" << infoLog << '\n';
-    }
-    
-    uint32_t shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &succes);
-    if (!succes) {
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cerr << "Failed to link shader program! Error:\n" << infoLog << '\n';
-    }
+    texture.bind(0, true);
+    glUniform1i(shader.getUniform("textureSampler"), 0);
 
-    glUseProgram(shaderProgram);
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
+    vao.bind();
 
+    eng::Vec3f cameraPos(0.f, 0.f, 3.f);
+    eng::Vec2f cameraRot(0.f, 0.f);
 
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glUniform1i(glGetUniformLocation(shaderProgram, "textureSampler"), 0);
-
-    glBindVertexArray(vao);
+    Application::setMouseMotionCallback([&](SDL_Event &event) {
+        cameraRot[0] += (float)(event.motion.yrel) / 256.f;
+        cameraRot[1] += (float)(event.motion.xrel) / 256.f;
+    });
 
     while (Application::running) {
         Application::pollEvents();
 
-        glClearColor(0.35f, 0.4f, 0.8f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        const float SPEED = 0.5;
+        float cosVel = cos(cameraRot[1]) * SPEED;
+        float sinVel = sin(cameraRot[1]) * SPEED;
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-        glDrawElements(GL_TRIANGLES, sizeof(indices) / sizeof(uint32_t), GL_UNSIGNED_INT, 0);
+        if (keyStates[KEY_W]) {
+            cameraPos[2] -= cosVel;
+            cameraPos[0] += sinVel;
+        }
+        if (keyStates[KEY_A]) {
+            cameraPos[2] -= sinVel;
+            cameraPos[0] -= cosVel;
+        }
+        if (keyStates[KEY_S]) {
+            cameraPos[2] += cosVel;
+            cameraPos[0] -= sinVel;
+        }
+        if (keyStates[KEY_D]) {
+            cameraPos[2] += sinVel;
+            cameraPos[0] += cosVel;
+        }
+        if (keyStates[KEY_SPACE]) {
+            cameraPos[1] += SPEED;
+        }
+        if (keyStates[KEY_SHIFT]) {
+            cameraPos[1] -= SPEED;
+        }
+
+        int wWidth, wHeight;
+        SDL_GetWindowSize(Application::window, &wWidth, &wHeight);
+
+        eng::Mat4f projMat = eng::Mat4f::GL_Projection(90.f, wWidth, wHeight, 0.1f, 100.f);
+        eng::Mat4f viewMat = eng::Mat4f::xRotation(cameraRot[0])
+            * eng::Mat4f::yRotation(cameraRot[1])
+            * eng::Mat4f::translation(-cameraPos[0], -cameraPos[1], -cameraPos[2]);
+
+        eng::Mat4f mvpMat = projMat * viewMat;
+
+        glClearColor(0.35f, 0.4f, 0.8f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glUniformMatrix4fv(mvpMatrix, 1, false, mvpMat[0]);
+
+        vao.bindIndexBuffer();
+        glDrawElementsInstanced(GL_TRIANGLES, copeBlock.indexCount, GL_UNSIGNED_INT, (void*)(0), SIZE * SIZE * SIZE);
 
         SDL_GL_SwapWindow(Application::window);
     }
+
+    vao.free();
+    shader.free();
+    texture.free();
+
+    Application::close();
 
     return 0;
 }

@@ -10,6 +10,11 @@
 
 namespace OBJMF {
 
+struct Section {
+    size_t offset;
+    size_t length;
+};
+
 struct Model {
 
     float *data = nullptr;
@@ -17,23 +22,28 @@ struct Model {
     size_t dataSize = 0;
     size_t indexCount = 0;
 
+    std::map<std::string, Section> sections;
+
     Model(float *d, size_t ds, uint32_t *i, size_t ic)
         : dataSize(ds), indexCount(ic)
     {
-        
-        
+        data = new float[ds];
+        indices = new uint32_t[ic];
+        memcpy(data, d, ds * sizeof(float));
+        memcpy(indices, i, ic * sizeof(uint32_t));
+    }
 
-    ~Model() {
+    void free() {
         if (data != nullptr) {
             delete[] data;
         }
         if (indices != nullptr) {
-            delete[] data;
+            delete[] indices;
         }
     }
 };
 
-void readObjFile(std::string path) {
+Model readObjFile(std::string path) {
 
     std::vector<eng::Vec3f> vertices;
     std::vector<eng::Vec2f> texCoords;
@@ -120,16 +130,10 @@ void readObjFile(std::string path) {
         }
     }
 
-    for (int i = 0; i < indices.size(); i += 3) {
-        std::cout << indices[i] << ' ' << indices[i + 1] << ' ' << indices[i + 2] << '\n';
-    }
-    for (int i = 0; i < data.size(); i += 8) {
-        std::cout << data[i] << ' ' << data[i + 1] << ' ' << data[i + 2] << " ; ";
-        std::cout << data[i + 3] << ' ' << data[i + 4] << " ; ";
-        std::cout << data[i + 5] << ' ' << data[i + 6] << ' ' << data[i + 7] << '\n';
-    }
-
     file.close();
+
+    Model model = { data.data(), data.size(), indices.data(), indices.size() };
+    return model;
 }
 
 }

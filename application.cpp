@@ -1,6 +1,7 @@
 #include "application.hpp"
 
 #include <glad/glad.h>
+
 #include <iostream>
 
 namespace Application {
@@ -8,6 +9,17 @@ namespace Application {
 SDL_Window *window = nullptr;
 SDL_GLContext context;
 bool running = true;
+
+std::function<void(SDL_Event&, bool)> keyCallback = nullptr;
+std::function<void(SDL_Event&)> mouseMotionCallback = nullptr;
+
+void setKeyCallback(std::function<void(SDL_Event&, bool)> f) {
+    keyCallback = f;
+}
+
+void setMouseMotionCallback(std::function<void(SDL_Event&)> f) {
+    mouseMotionCallback = f;
+}
 
 SDL_Event event;
 void pollEvents() {
@@ -21,6 +33,21 @@ void pollEvents() {
                     case SDL_WINDOWEVENT_SIZE_CHANGED:
                         glViewport(0, 0, event.window.data1, event.window.data2);
                         break;
+                }
+                break;
+            case SDL_KEYDOWN:
+                if (keyCallback != nullptr) {
+                    keyCallback(event, true);
+                }
+                break;
+            case SDL_KEYUP:
+                if (keyCallback != nullptr) {
+                    keyCallback(event, false);
+                }
+                break;
+            case SDL_MOUSEMOTION:
+                if (mouseMotionCallback != nullptr) {
+                    mouseMotionCallback(event);
                 }
                 break;
         }
@@ -61,6 +88,7 @@ void init() {
     }
 
     SDL_GL_SetSwapInterval(1);
+    SDL_SetRelativeMouseMode(SDL_TRUE);
 }
 
 void close() {
